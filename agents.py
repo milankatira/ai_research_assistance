@@ -2,6 +2,13 @@
 
 Four stages: search agent, reader agent, writer chain, critic chain. The LLM is
 built once and reused across all stages.
+
+LLM backend: Ollama (local) running gemma3. Make sure Ollama is running and the
+model is pulled before starting the app::
+
+    ollama pull gemma3
+    ollama serve          # already running if you opened the Ollama app
+
 """
 from __future__ import annotations
 
@@ -10,7 +17,7 @@ from functools import lru_cache
 from langchain.agents import create_agent
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_ollama import ChatOllama
 
 from config import MODEL_NAME, MODEL_TEMPERATURE, get_logger
 from tools import scrape_url, web_search
@@ -19,10 +26,10 @@ logger = get_logger(__name__)
 
 
 @lru_cache(maxsize=1)
-def get_llm() -> ChatGoogleGenerativeAI:
-    """Return a shared Gemini chat model (built once, cached)."""
+def get_llm() -> ChatOllama:
+    """Return a shared Ollama chat model (built once, cached)."""
     logger.info("Initialising LLM: %s (temp=%s)", MODEL_NAME, MODEL_TEMPERATURE)
-    return ChatGoogleGenerativeAI(model=MODEL_NAME, temperature=MODEL_TEMPERATURE)
+    return ChatOllama(model=MODEL_NAME, temperature=MODEL_TEMPERATURE)
 
 
 # ── Agents ────────────────────────────────────────────────────────────────────
