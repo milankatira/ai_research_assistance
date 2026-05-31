@@ -1,34 +1,42 @@
+"""Agent and chain factory for the ResearchMind pipeline.
+
+Four stages: search agent, reader agent, writer chain, critic chain. The LLM is
+built once and reused across all stages.
+"""
+from __future__ import annotations
+
+from functools import lru_cache
+
 from langchain.agents import create_agent
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from tools import web_search , scrape_url
-from dotenv import load_dotenv
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_google_genai import ChatGoogleGenerativeAI
 
-load_dotenv()
+from config import MODEL_NAME, MODEL_TEMPERATURE, get_logger
+from tools import scrape_url, web_search
 
-#model setup
-llm = ChatGoogleGenerativeAI(model = "gemini-2.5-flash",temperature=0)
+logger = get_logger(__name__)
 
 
-#1st agent
+@lru_cache(maxsize=1)
+def get_llm() -> ChatGoogleGenerativeAI:
+    """Return a shared Gemini chat model (built once, cached)."""
+    logger.info("Initialising LLM: %s (temp=%s)", MODEL_NAME, MODEL_TEMPERATURE)
+    return ChatGoogleGenerativeAI(model=MODEL_NAME, temperature=MODEL_TEMPERATURE)
+
+
+# ── Agents ────────────────────────────────────────────────────────────────────
 def build_search_agent():
-    return create_agent(
-        model = llm,
-        tools= [web_search]
-    )
+    """Agent 1 — gathers recent web information via Tavily search."""
+    return create_agent(model=get_llm(), tools=[web_search])
 
-#2nd agent
 
 def build_reader_agent():
-    return create_agent(
-        model = llm,
-        tools = [scrape_url]
-    )
+    """Agent 2 — scrapes the most relevant URL for deeper content."""
+    return create_agent(model=get_llm(), tools=[scrape_url])
 
 
-#writer chain
-
+# ── Writer chain ──────────────────────────────────────────────────────────────
 writer_prompt = ChatPromptTemplate.from_messages([
     ("system", "You are an expert research writer. Write clear, structured and insightful reports."),
     ("human", """Write a detailed research report on the topic below.
@@ -47,12 +55,11 @@ Structure the report as:
 Be detailed, factual and professional."""),
 ])
 
-writer_chain = writer_prompt | llm | StrOutputParser()
+writer_chain = writer_prompt | get_llm() | StrOutputParser()
 
-#critic_chain
-
+# ── Critic chain ──────────────────────────────────────────────────────────────
 critic_prompt = ChatPromptTemplate.from_messages([
-     ("system", "You are a sharp and constructive research critic. Be honest and specific."),
+    ("system", "You are a sharp and constructive research critic. Be honest and specific."),
     ("human", """Review the research report below and evaluate it strictly.
 
 Report:
@@ -74,4 +81,4 @@ One line verdict:
 ..."""),
 ])
 
-critic_chain = critic_prompt | llm | StrOutputParser()
+critic_chain = critic_prompt | get_llm() | StrOutputParser()
